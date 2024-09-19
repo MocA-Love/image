@@ -4,6 +4,9 @@ use std::cmp;
 use crate::image::{GenericImage, GenericImageView, SubImage};
 use crate::traits::{Lerp, Pixel, Primitive};
 
+use rayon::prelude::*;
+use rayon::iter::IntoParallelIterator;
+
 pub use self::sample::FilterType;
 
 pub use self::sample::FilterType::{CatmullRom, Gaussian, Lanczos3, Nearest, Triangle};
@@ -236,6 +239,44 @@ where
 
             bottom.put_pixel(origin_bottom_x + x, origin_bottom_y + y, bottom_pixel);
         }
+    }
+}
+
+pub fn overlay_v2<I, J>(bottom: &mut I, top: &J, x: i64, y: i64)
+where
+    I: GenericImage + Sync + Send,
+    J: GenericImageView<Pixel = I::Pixel> + Sync,
+    <I as GenericImageView>::Pixel: Send, // Pixel型にSendを要求
+{
+    let bottom_dims = bottom.dimensions();
+    let top_dims = top.dimensions();
+
+    // Crop our top image if we're going out of bounds
+    let (origin_bottom_x, origin_bottom_y, origin_top_x, origin_top_y, range_width, range_height) =
+        overlay_bounds_ext(bottom_dims, top_dims, x, y);
+
+    // バッファを準備し、各スレッドで計算結果を一時保存する
+    let buffer: Vec<(u32, u32, <I as GenericImageView>::Pixel)> = {
+        // `bottom` を読み取り専用で借用
+        let bottom_read: &I = &*bottom;
+
+        (0..range_height)
+            .into_par_iter()
+            .flat_map(|dy| {
+                let y_offset = origin_bottom_y + dy;
+                (0..range_width).into_par_iter().map(move |dx| {
+                    let p = top.get_pixel(origin_top_x + dx, origin_top_y + dy);
+                    let mut bottom_pixel = bottom_read.get_pixel(origin_bottom_x + dx, y_offset);
+                    bottom_pixel.blend(&p);
+                    (origin_bottom_x + dx, y_offset, bottom_pixel)
+                })
+            })
+            .collect()
+    };
+
+    // バッファから一気に `bottom` に書き込み
+    for (x, y, pixel) in buffer {
+        bottom.put_pixel(x, y, pixel);
     }
 }
 
