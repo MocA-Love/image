@@ -540,17 +540,14 @@ trait HeaderReader: Read {
             }
         }
 
-        let (h, w, d, m) = match (height, width, depth, maxval) {
-            (Some(h), Some(w), Some(d), Some(m)) => (h, w, d, m),
-            _ => {
-                return Err(DecoderError::HeaderLineMissing {
-                    height,
-                    width,
-                    depth,
-                    maxval,
-                }
-                .into())
+        let (Some(h), Some(w), Some(d), Some(m)) = (height, width, depth, maxval) else {
+            return Err(DecoderError::HeaderLineMissing {
+                height,
+                width,
+                depth,
+                maxval,
             }
+            .into());
         };
 
         let tupltype = match tupltype {
@@ -691,12 +688,12 @@ fn read_separated_ascii<T: FromStr<Err = ParseIntError>>(reader: &mut dyn Read) 
 where
     T::Err: Display,
 {
-    let is_separator = |v: &u8| matches! { *v, b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r' | b' ' };
+    let is_separator = |v: &u8| matches!(*v, b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r' | b' ');
 
     let token = reader
         .bytes()
-        .skip_while(|v| v.as_ref().ok().map_or(false, is_separator))
-        .take_while(|v| v.as_ref().ok().map_or(false, |c| !is_separator(c)))
+        .skip_while(|v| v.as_ref().ok().is_some_and(is_separator))
+        .take_while(|v| v.as_ref().ok().is_some_and(|c| !is_separator(c)))
         .collect::<Result<Vec<u8>, _>>()?;
 
     if !token.is_ascii() {

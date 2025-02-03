@@ -18,7 +18,7 @@ where
 {
     let base: PathBuf = BASE_PATH.iter().collect();
     let decoders = &[
-        "tga", "tiff", "png", "gif", "bmp", "ico", "hdr", "pbm", "webp",
+        "tga", "tiff", "png", "gif", "bmp", "ico", "hdr", "pbm", "webp", "pcx",
     ];
     for decoder in decoders {
         let mut path = base.clone();
@@ -267,9 +267,8 @@ fn check_references() {
             }
         }
 
-        let test_img = match test_img.as_ref() {
-            Some(img) => img,
-            None => return,
+        let Some(test_img) = test_img.as_ref() else {
+            return;
         };
 
         let test_crc_actual = {

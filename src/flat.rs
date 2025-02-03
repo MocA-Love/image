@@ -282,7 +282,7 @@ impl SampleLayout {
     /// Check if a buffer of length `len` is large enough.
     #[must_use]
     pub fn fits(&self, len: usize) -> bool {
-        self.min_length().map_or(false, |min| len >= min)
+        self.min_length().is_some_and(|min| len >= min)
     }
 
     /// The extents of this array, in order of increasing strides.
@@ -421,9 +421,8 @@ impl SampleLayout {
         let idx_x = x.checked_mul(self.width_stride);
         let idx_y = y.checked_mul(self.height_stride);
 
-        let (idx_c, idx_x, idx_y) = match (idx_c, idx_x, idx_y) {
-            (Some(idx_c), Some(idx_x), Some(idx_y)) => (idx_c, idx_x, idx_y),
-            _ => return None,
+        let (Some(idx_c), Some(idx_x), Some(idx_y)) = (idx_c, idx_x, idx_y) else {
+            return None;
         };
 
         Some(0usize)
@@ -748,10 +747,7 @@ impl<Buffer> FlatSamples<Buffer> {
     where
         Buffer: AsRef<[T]>,
     {
-        let min_length = match self.min_length() {
-            None => return None,
-            Some(index) => index,
-        };
+        let min_length = self.min_length()?;
 
         let slice = self.samples.as_ref();
         if slice.len() < min_length {
@@ -766,10 +762,7 @@ impl<Buffer> FlatSamples<Buffer> {
     where
         Buffer: AsMut<[T]>,
     {
-        let min_length = match self.min_length() {
-            None => return None,
-            Some(index) => index,
-        };
+        let min_length = self.min_length()?;
 
         let slice = self.samples.as_mut();
         if slice.len() < min_length {
@@ -950,7 +943,7 @@ impl<'buf, Subpixel> FlatSamples<&'buf [Subpixel]> {
     /// use image::{flat::FlatSamples, GenericImage, RgbImage, Rgb};
     ///
     /// let background = Rgb([20, 20, 20]);
-    /// let bg = FlatSamples::with_monocolor(&background, 200, 200);;
+    /// let bg = FlatSamples::with_monocolor(&background, 200, 200);
     ///
     /// let mut image = RgbImage::new(200, 200);
     /// paint_something(&mut image);
@@ -993,7 +986,6 @@ impl<'buf, Subpixel> FlatSamples<&'buf [Subpixel]> {
 ///
 /// * For all indices inside bounds, the corresponding index is valid in the buffer
 /// * `P::channel_count()` agrees with `self.inner.layout.channels`
-///
 #[derive(Clone, Debug)]
 pub struct View<Buffer, P: Pixel>
 where
@@ -1016,7 +1008,6 @@ where
 /// * There is no aliasing of samples
 /// * The samples are packed, i.e. `self.inner.layout.sample_stride == 1`
 /// * `P::channel_count()` agrees with `self.inner.layout.channels`
-///
 #[derive(Clone, Debug)]
 pub struct ViewMut<Buffer, P: Pixel>
 where

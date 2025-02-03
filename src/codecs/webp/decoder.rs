@@ -3,19 +3,23 @@ use std::io::{BufRead, Read, Seek};
 use crate::buffer::ConvertBuffer;
 use crate::error::{DecodingError, ImageError, ImageResult};
 use crate::image::{ImageDecoder, ImageFormat};
+use crate::metadata::Orientation;
 use crate::{AnimationDecoder, ColorType, Delay, Frame, Frames, RgbImage, Rgba, RgbaImage};
 
-/// WebP Image format decoder. Currently only supports lossy RGB images or lossless RGBA images.
+/// WebP Image format decoder.
+///
+/// Supports both lossless and lossy WebP images.
 pub struct WebPDecoder<R> {
     inner: image_webp::WebPDecoder<R>,
+    orientation: Option<Orientation>,
 }
 
 impl<R: BufRead + Seek> WebPDecoder<R> {
-    /// Create a new `WebPDecoder` from the Reader ```r```.
-    /// This function takes ownership of the Reader.
+    /// Create a new `WebPDecoder` from the Reader `r`.
     pub fn new(r: R) -> ImageResult<Self> {
         Ok(Self {
             inner: image_webp::WebPDecoder::new(r).map_err(ImageError::from_webp_decode)?,
+            orientation: None,
         })
     }
 
@@ -64,19 +68,36 @@ impl<R: BufRead + Seek> ImageDecoder for WebPDecoder<R> {
     }
 
     fn exif_metadata(&mut self) -> ImageResult<Option<Vec<u8>>> {
-        self.inner
+        let exif = self
+            .inner
             .exif_metadata()
-            .map_err(ImageError::from_webp_decode)
+            .map_err(ImageError::from_webp_decode)?;
+
+        self.orientation = Some(
+            exif.as_ref()
+                .and_then(|exif| Orientation::from_exif_chunk(exif))
+                .unwrap_or(Orientation::NoTransforms),
+        );
+
+        Ok(exif)
+    }
+
+    fn orientation(&mut self) -> ImageResult<Orientation> {
+        // `exif_metadata` caches the orientation, so call it if `orientation` hasn't been set yet.
+        if self.orientation.is_none() {
+            let _ = self.exif_metadata()?;
+        }
+        Ok(self.orientation.unwrap())
     }
 }
 
-impl<'a, R: 'a + Read + Seek> AnimationDecoder<'a> for WebPDecoder<R> {
+impl<'a, R: 'a + BufRead + Seek> AnimationDecoder<'a> for WebPDecoder<R> {
     fn into_frames(self) -> Frames<'a> {
         struct FramesInner<R: Read + Seek> {
             decoder: WebPDecoder<R>,
             current: u32,
         }
-        impl<R: Read + Seek> Iterator for FramesInner<R> {
+        impl<R: BufRead + Seek> Iterator for FramesInner<R> {
             type Item = ImageResult<Frame>;
 
             fn next(&mut self) -> Option<Self::Item> {

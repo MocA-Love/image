@@ -16,10 +16,11 @@ use crate::flat::FlatSamples;
 use crate::image::{GenericImage, GenericImageView, ImageDecoder, ImageEncoder, ImageFormat};
 use crate::image_reader::free_functions;
 use crate::math::resize_dimensions;
+use crate::metadata::Orientation;
 use crate::traits::Pixel;
+use crate::ImageReader;
 use crate::{image, Luma, LumaA};
 use crate::{imageops, ExtendedColorType};
-use crate::{ImageReader, Orientation};
 use crate::{Rgb32FImage, Rgba32FImage};
 
 /// A Dynamic Image
@@ -556,7 +557,7 @@ impl DynamicImage {
         }
     }
 
-    /// Return a mutable reference to an 16bit RGBA image
+    /// Return a mutable reference to an 32bit RGBA image
     pub fn as_mut_rgba32f(&mut self) -> Option<&mut Rgba32FImage> {
         match *self {
             DynamicImage::ImageRgba32F(ref mut p) => Some(p),
@@ -824,9 +825,19 @@ impl DynamicImage {
 
     /// Performs a Gaussian blur on this image.
     /// `sigma` is a measure of how much to blur by.
+    /// Use [DynamicImage::fast_blur()] for a faster but less
+    /// accurate version.
     #[must_use]
     pub fn blur(&self, sigma: f32) -> DynamicImage {
         dynamic_map!(*self, ref p => imageops::blur(p, sigma))
+    }
+
+    /// Performs a fast blur on this image.
+    /// `sigma` is the standard deviation of the
+    /// (approximated) Gaussian
+    #[must_use]
+    pub fn fast_blur(&self, sigma: f32) -> DynamicImage {
+        dynamic_map!(*self, ref p => imageops::fast_blur(p, sigma))
     }
 
     /// Performs an unsharpen mask on this image.
@@ -930,25 +941,12 @@ impl DynamicImage {
     ///
     /// ```
     /// # fn only_check_if_this_compiles() -> Result<(), Box<dyn std::error::Error>> {
-    /// # use image::{Orientation, DynamicImage, ImageReader, ImageDecoder};
-    /// use exif::{In, Tag}; // third-party crate `kamadak_exif` is needed to parse Exif chunk
+    /// use image::{DynamicImage, ImageReader, ImageDecoder};
     ///
     /// let mut decoder = ImageReader::open("file.jpg")?.into_decoder()?;
-    /// let raw_exif = decoder.exif_metadata();
+    /// let orientation = decoder.orientation()?;
     /// let mut image = DynamicImage::from_decoder(decoder)?;
-    ///
-    /// // Parse Exif chunk (if present) and apply the orientation
-    /// if let Ok(Some(raw_exif)) = raw_exif {
-    ///     let reader = exif::Reader::new();
-    ///     let exif = reader.read_raw(raw_exif)?;
-    ///     if let Some(orientation) = exif.get_field(Tag::Orientation, In::PRIMARY) {
-    ///        if let Some(value) = orientation.value.get_uint(0) {
-    ///            if let Some(orientation) = Orientation::from_exif(value as u8) {
-    ///                image.apply_orientation(orientation);
-    ///            }
-    ///        }
-    ///    }
-    /// }
+    /// image.apply_orientation(orientation);
     /// # Ok(())
     /// # }
     /// ```
