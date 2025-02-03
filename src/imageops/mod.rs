@@ -172,7 +172,7 @@ pub fn overlay_bounds(
 /// In particular, we want to ensure that all these coordinate accesses are safe:
 /// 1. `bottom.get_pixel(origin_bottom_x + [0..x_range), origin_bottom_y + [0..y_range))`
 /// 2. `top.get_pixel(origin_top_y + [0..x_range), origin_top_y + [0..y_range))`
-fn overlay_bounds_ext(
+pub fn overlay_bounds_ext(
     (bottom_width, bottom_height): (u32, u32),
     (top_width, top_height): (u32, u32),
     x: i64,
